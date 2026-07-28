@@ -1,0 +1,63 @@
+{
+  "personal_info": {
+    "full_name": "",
+    "email": "",
+    "phone": "",
+    "location": "",
+    "linkedin": "",
+    "portfolio_url": ""
+  },
+  "target_role": {
+    "title": "",
+    "industry": "",
+    "job_description_pasted": ""
+  },
+  "summary": {
+    "text": ""
+  },
+  "experience": [
+    {
+      "company": "",
+      "role": "",
+      "start_date": "",
+      "end_date": "",
+      "is_current": false,
+      "bullets": []
+    }
+  ],
+  "education": [
+    {
+      "institution": "",
+      "degree": "",
+      "field_of_study": "",
+      "start_date": "",
+      "end_date": "",
+      "gpa": ""
+    }
+  ],
+  "skills": {
+    "technical": [],
+    "soft": [],
+    "tools": []
+  },
+  "projects": [
+    {
+      "name": "",
+      "description": "",
+      "tech_stack": [],
+      "link": ""
+    }
+  ],
+  "certifications": [
+    {
+      "name": "",
+      "issuer": "",
+      "date": ""
+    }
+  ],
+  "meta": {
+    "template_choice": "",
+    "created_at": "",
+    "last_updated": ""
+  }
+}
