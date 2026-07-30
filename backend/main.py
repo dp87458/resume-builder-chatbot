@@ -33,11 +33,13 @@ You need to collect:
 - personal_info (full_name, email, phone, location, linkedin, portfolio_url)
 - target_role (title, industry)
 - summary (a professional summary - you can help draft this)
-- experience (company, role, start_date, end_date, is_current, bullets - achievements/responsibilities)
+- experience (company, role, employment_type, whether it was paid or unpaid, start/end dates or duration, bullets - achievements/responsibilities)
 - education (institution, degree, field_of_study, start_date, end_date)
 - skills (technical, soft, tools)
 - projects (name, description, tech_stack, link)
 - certifications (name, issuer, date)
+
+When discussing work experience, always ask whether the role was paid or unpaid, and get the specific time period (either start and end month/year, or duration like "6 months").
 
 Ask ONE question at a time. Be conversational, not robotic. Start by asking what role they're building a resume for, then their name and contact info, then move through experience, education, skills, projects, and certifications.
 
@@ -93,7 +95,22 @@ async def generate_resume_data(msg: ChatMessage):
         temperature=0
     )
 
+    conversation_text = ""
+    for m in session["messages"]:
+        if m["role"] == "user":
+            conversation_text += f"User: {m['content']}\n"
+        elif m["role"] == "assistant":
+            conversation_text += f"Assistant: {m['content']}\n"
+
+    print("=== CONVERSATION SENT FOR EXTRACTION ===")
+    print(conversation_text)
+    print("=========================================")
+
     raw_output = response.choices[0].message.content.strip()
+
+    print("=== RAW LLM OUTPUT ===")
+    print(raw_output)
+    print("=======================")
 
     # Clean up in case the model wraps it in markdown fences anyway
     if raw_output.startswith("```"):
