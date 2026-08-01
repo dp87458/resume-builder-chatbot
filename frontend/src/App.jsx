@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 function App() {
   const [messages, setMessages] = useState([
@@ -6,8 +6,38 @@ function App() {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sessionId] = useState(() => "session-" + Date.now());
+  const [sessionId] = useState(() => {
+    let id = localStorage.getItem("resume_session_id");
+    if (!id) {
+      id = "session-" + Date.now();
+      localStorage.setItem("resume_session_id", id);
+    }
+    return id;
+  });
   const [progress, setProgress] = useState({});
+
+  const [optimizing, setOptimizing] = useState(false);
+  const [suggestions, setSuggestions] = useState(null);
+
+useEffect(() => {
+  const loadConversation = async () => {
+    try {
+      const response = await fetch("http://127.0.0.1:8000/get-conversation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, message: "" })
+      });
+      const data = await response.json();
+      if (data.messages && data.messages.length > 0) {
+        setMessages(data.messages);
+        checkProgress(sessionId);
+      }
+    } catch (err) {
+      console.log("Failed to load conversation:", err);
+    }
+  };
+  loadConversation();
+}, []);
 
   const sendMessage = async () => {
     if (!input.trim()) return;
@@ -41,7 +71,7 @@ function App() {
         body: JSON.stringify({ session_id: currentSessionId, message: "" })
       });
       const data = await response.json();
-      if (data.resume_data) {
+      if (data && data.resume_data) {
         const d = data.resume_data;
         setProgress({
           personal_info: !!d.personal_info?.full_name && !!d.personal_info?.email,
@@ -72,6 +102,33 @@ function App() {
       alert("Error generating resume data.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const startNewConversation = () => {
+    const newId = "session-" + Date.now();
+    localStorage.setItem("resume_session_id", newId);
+    window.location.reload();
+  };
+
+  const optimizeResume = async () => {
+    setOptimizing(true);
+    try {
+      const response = await fetch("http://127.0.0.1:8000/optimize-resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, message: "" })
+      });
+      const data = await response.json();
+      if (data.error) {
+        alert(data.error);
+      } else {
+        setSuggestions(data);
+      }
+    } catch (err) {
+      alert("Error getting optimization suggestions.");
+    } finally {
+      setOptimizing(false);
     }
   };
 
@@ -138,6 +195,28 @@ function App() {
       <button onClick={generateResume} style={{ marginTop: "12px", width: "100%" }} disabled={loading}>
         Generate Resume Data
       </button>
+
+      <button onClick={startNewConversation} style={{ marginTop: "8px", width: "100%", background: "#eee", color: "#333", padding: "8px", border: "1px solid #ccc", borderRadius: "4px", cursor: "pointer" }}>
+        Start New Conversation
+      </button>
+
+      <button onClick={optimizeResume} style={{ marginTop: "8px", width: "100%", background: "#4CAF50", color: "#fff", padding: "8px", border: "none", borderRadius: "4px", cursor: "pointer" }} disabled={optimizing}>
+        {optimizing ? "Analyzing..." : "Optimize My Resume"}
+      </button>
+
+      {suggestions && (
+        <div style={{ marginTop: "16px", padding: "12px", border: "1px solid #ccc", borderRadius: "8px", background: "#f9f9f9", whiteSpace: "pre-wrap", fontSize: "14px" }}>
+          <h3>Suggestions for {suggestions.role}</h3>
+          <p>{suggestions.suggestions}</p>
+          {suggestions.sources_used && suggestions.sources_used.length > 0 && (
+            <div style={{ marginTop: "10px", fontSize: "12px", color: "#666" }}>
+              Sources: {suggestions.sources_used.map((s, i) => (
+                <a key={i} href={s} target="_blank" rel="noreferrer" style={{ display: "block" }}>{s}</a>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
