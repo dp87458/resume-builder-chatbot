@@ -11,7 +11,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS sessions (
             session_id TEXT PRIMARY KEY,
             messages TEXT NOT NULL,
-            resume_data TEXT
+            resume_data TEXT,
+            research_notes TEXT
         )
     """)
     conn.commit()
@@ -20,29 +21,31 @@ def init_db():
 def get_session(session_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT messages, resume_data FROM sessions WHERE session_id = ?", (session_id,))
+    cursor.execute("SELECT messages, resume_data, research_notes FROM sessions WHERE session_id = ?", (session_id,))
     row = cursor.fetchone()
     conn.close()
     if row is None:
         return None
     return {
         "messages": json.loads(row[0]),
-        "resume_data": json.loads(row[1]) if row[1] else {}
+        "resume_data": json.loads(row[1]) if row[1] else {},
+        "research_notes": row[2] if row[2] else ""
     }
-
-def save_session(session_id, messages, resume_data=None):
+def save_session(session_id, messages, resume_data=None, research_notes=None):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO sessions (session_id, messages, resume_data)
-        VALUES (?, ?, ?)
+        INSERT INTO sessions (session_id, messages, resume_data, research_notes)
+        VALUES (?, ?, ?, ?)
         ON CONFLICT(session_id) DO UPDATE SET
             messages = excluded.messages,
-            resume_data = excluded.resume_data
+            resume_data = excluded.resume_data,
+            research_notes = COALESCE(excluded.research_notes, sessions.research_notes)
     """, (
         session_id,
         json.dumps(messages),
-        json.dumps(resume_data) if resume_data else None
+        json.dumps(resume_data) if resume_data else None,
+        research_notes
     ))
     conn.commit()
     conn.close()

@@ -18,6 +18,9 @@ function App() {
 
   const [optimizing, setOptimizing] = useState(false);
   const [suggestions, setSuggestions] = useState(null);
+  const [jobDescription, setJobDescription] = useState("");
+  const [atsResult, setAtsResult] = useState(null);
+  const [checkingAts, setCheckingAts] = useState(false);
 
 useEffect(() => {
   const loadConversation = async () => {
@@ -109,6 +112,31 @@ useEffect(() => {
     const newId = "session-" + Date.now();
     localStorage.setItem("resume_session_id", newId);
     window.location.reload();
+  };
+
+  const checkATS = async () => {
+    if (!jobDescription.trim()) {
+      alert("Please paste a job description first.");
+      return;
+    }
+    setCheckingAts(true);
+    try {
+      const response = await fetch("http://127.0.0.1:8000/ats-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, job_description: jobDescription })
+      });
+      const data = await response.json();
+      if (data.error) {
+        alert(data.error);
+      } else {
+        setAtsResult(data);
+      }
+    } catch (err) {
+      alert("Error checking ATS score.");
+    } finally {
+      setCheckingAts(false);
+    }
   };
 
   const optimizeResume = async () => {
@@ -215,6 +243,26 @@ useEffect(() => {
               ))}
             </div>
           )}
+        </div>
+      )}
+      <div style={{ marginTop: "16px" }}>
+        <textarea
+          value={jobDescription}
+          onChange={(e) => setJobDescription(e.target.value)}
+          placeholder="Paste a job description here to check your ATS match score..."
+          style={{ width: "100%", height: "100px", padding: "8px", boxSizing: "border-box" }}
+        />
+        <button onClick={checkATS} style={{ marginTop: "8px", width: "100%", background: "#2196F3", color: "#fff", padding: "8px", border: "none", borderRadius: "4px", cursor: "pointer" }} disabled={checkingAts}>
+          {checkingAts ? "Checking..." : "Check ATS Score"}
+        </button>
+      </div>
+
+      {atsResult && (
+        <div style={{ marginTop: "16px", padding: "12px", border: "1px solid #ccc", borderRadius: "8px", background: atsResult.match_score >= 90 ? "#e8f5e9" : "#fff3e0" }}>
+          <h3>ATS Match Score: {atsResult.match_score}%</h3>
+          <p><strong>Found ({atsResult.keywords_found.length}):</strong> {atsResult.keywords_found.join(", ")}</p>
+          <p><strong>Missing ({atsResult.keywords_missing.length}):</strong> {atsResult.keywords_missing.join(", ")}</p>
+          <p><strong>Recommendation:</strong> {atsResult.recommendation}</p>
         </div>
       )}
     </div>

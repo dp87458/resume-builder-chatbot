@@ -7,7 +7,7 @@ from groq import Groq
 import google.generativeai as genai
 from schema import RESUME_SCHEMA_TEMPLATE, EXTRACTION_PROMPT
 from database import init_db, get_session, save_session, session_exists
-from optimizer import search_role_insights, format_search_results_for_prompt, OPTIMIZATION_PROMPT
+from optimizer import search_role_insights, format_search_results_for_prompt, OPTIMIZATION_PROMPT, should_search_and_what
 import json
 
 def call_llm(messages, temperature=0.7):
@@ -82,16 +82,42 @@ async def chat(msg: ChatMessage):
     if session is None:
         session = {
             "messages": [{"role": "system", "content": SYSTEM_PROMPT}],
-            "resume_data": {}
+            "resume_data": {},
+            "research_notes": ""
         }
 
     session["messages"].append({"role": "user", "content": msg.message})
-    reply = call_llm(session["messages"], temperature=0.7)
+
+    # Step A: check if this message is worth researching (every message, not just once)
+    existing_research = session.get("research_notes", "")
+
+    search_topic = should_search_and_what(msg.message, call_llm)
+    if search_topic and search_topic not in existing_research:
+        print(f"Triggering search for: {search_topic}")
+        search_results = search_role_insights(search_topic)
+        new_research = format_search_results_for_prompt(search_results)
+
+        existing_research = existing_research + f"\n\n--- Research on: {search_topic} ---\n{new_research}"
+        session["research_notes"] = existing_research
+    
+    # Step B: build the actual system prompt, with research if we have it
+    messages_to_send = list(session["messages"])  # copy, don't mutate original
+    if existing_research:
+        research_note = {
+            "role": "system",
+            "content": f"You have this accumulated research available, covering multiple topics the user has mentioned:\n{existing_research}\n\nWhen it naturally fits the current topic being discussed, weave in ONE short, specific, actionable tip drawn from the MOST RELEVANT section above. Don't force it into every reply, and don't list multiple tips at once."
+        }
+        messages_to_send.append(research_note)
+
+    
+
+    reply = call_llm(messages_to_send, temperature=0.7)
     session["messages"].append({"role": "assistant", "content": reply})
 
-    save_session(msg.session_id, session["messages"], session.get("resume_data"))
+    save_session(msg.session_id, session["messages"], session.get("resume_data"), session.get("research_notes"))
 
     return {"reply": reply}
+
 
 @app.post("/get-conversation")
 async def get_conversation(msg: ChatMessage):
@@ -101,6 +127,58 @@ async def get_conversation(msg: ChatMessage):
     # Skip the system prompt when sending back to frontend
     visible_messages = [m for m in session["messages"] if m["role"] != "system"]
     return {"messages": visible_messages}
+
+class ATSCheckRequest(BaseModel):
+    session_id: str
+    job_description: str
+
+@app.post("/ats-check")
+async def ats_check(req: ATSCheckRequest):
+    session = get_session(req.session_id)
+    if session is None:
+        return {"error": "No session found. Start a conversation first."}
+
+    resume_data = session.get("resume_data")
+    if not resume_data:
+        return {"error": "No resume data found. Generate your resume data first."}
+
+    resume_text = json.dumps(resume_data)
+
+    ats_prompt = f"""You are an ATS (Applicant Tracking System) keyword matcher. Compare the job description below against the candidate's resume data.
+
+Job Description:
+{req.job_description}
+
+Candidate's Resume Data:
+{resume_text}
+
+Instructions:
+1. Extract the 15-20 most important keywords/skills/qualifications from the job description (technical skills, tools, certifications, soft skills, years of experience, etc.)
+2. Check which of these keywords are present (even if worded slightly differently) in the resume data.
+3. Calculate a match percentage: (keywords found / total keywords) * 100
+4. List the specific keywords that are MISSING from the resume.
+
+Respond in EXACTLY this JSON format, nothing else, no markdown fences:
+{{
+  "match_score": <number 0-100>,
+  "total_keywords": <number>,
+  "keywords_found": ["keyword1", "keyword2", ...],
+  "keywords_missing": ["keyword3", "keyword4", ...],
+  "recommendation": "<1-2 sentence summary of what to add to improve the score>"
+}}"""
+
+    raw_output = call_llm([{"role": "user", "content": ats_prompt}], temperature=0).strip()
+
+    if raw_output.startswith("```"):
+        raw_output = raw_output.strip("`")
+        if raw_output.startswith("json"):
+            raw_output = raw_output[4:]
+
+    try:
+        ats_result = json.loads(raw_output)
+        return ats_result
+    except json.JSONDecodeError:
+        return {"error": "Failed to parse ATS result", "raw_output": raw_output}
 
 @app.post("/optimize-resume")
 async def optimize_resume(msg: ChatMessage):

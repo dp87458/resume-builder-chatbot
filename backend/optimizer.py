@@ -1,5 +1,23 @@
 from ddgs import DDGS
 
+def should_search_and_what(user_message, call_llm_func):
+    """Ask the LLM whether this message is worth researching, and what to search for."""
+    classifier_prompt = f"""You are a quick classifier. Given this message from a user building a resume, decide if it mentions something worth researching online (like a target job role, a specific certification, or a specialized skill/tool).
+
+User message: "{user_message}"
+
+Reply with ONLY one of these two formats, nothing else:
+- If nothing worth researching: NO
+- If something is worth researching: YES: <short search topic, e.g. "Technical Analyst resume keywords">
+"""
+    result = call_llm_func([{"role": "user", "content": classifier_prompt}], temperature=0)
+    result = result.strip()
+
+    if result.startswith("YES:"):
+        topic = result.replace("YES:", "").strip()
+        return topic
+    return None
+
 def search_role_insights(role_title):
     """Search the web for resume tips and keywords specific to a role."""
     queries = [
